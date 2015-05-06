@@ -15732,17 +15732,34 @@ var ts;
                 }
                 // Target type is type of prototype property
                 var prototypeProperty = getPropertyOfType(rightType, "prototype");
-                if (!prototypeProperty) {
-                    return type;
+                if (prototypeProperty) {
+                    var targetType = getTypeOfSymbol(prototypeProperty);
+                    if (targetType !== anyType) {
+                        // Narrow to the target type if it's a subtype of the current type
+                        if (isTypeSubtypeOf(targetType, type)) {
+                            return targetType;
+                        }
+                        // If the current type is a union type, remove all constituents that aren't subtypes of the target.
+                        if (type.flags & 16384 /* Union */) {
+                            return getUnionType(ts.filter(type.types, function (t) { return isTypeSubtypeOf(t, targetType); }));
+                        }
+                    }
                 }
-                var targetType = getTypeOfSymbol(prototypeProperty);
-                // Narrow to target type if it is a subtype of current type
-                if (isTypeSubtypeOf(targetType, type)) {
-                    return targetType;
+                // Target type is type of construct signature
+                var constructSignatures;
+                if (rightType.flags & 2048 /* Interface */) {
+                    constructSignatures = resolveDeclaredMembers(rightType).declaredConstructSignatures;
                 }
-                // If current type is a union type, remove all constituents that aren't subtypes of target type
-                if (type.flags & 16384 /* Union */) {
-                    return getUnionType(ts.filter(type.types, function (t) { return isTypeSubtypeOf(t, targetType); }));
+                else if (rightType.flags & 32768 /* Anonymous */) {
+                    constructSignatures = getSignaturesOfType(rightType, 1 /* Construct */);
+                }
+                if (constructSignatures && constructSignatures.length !== 0) {
+                    var instanceType = getUnionType(ts.map(constructSignatures, function (signature) { return getReturnTypeOfSignature(getErasedSignature(signature)); }));
+                    // Pickup type from union types
+                    if (type.flags & 16384 /* Union */) {
+                        return getUnionType(ts.filter(type.types, function (t) { return isTypeSubtypeOf(t, instanceType); }));
+                    }
+                    return instanceType;
                 }
                 return type;
             }
